@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="refresh" content="30">
+  <style>
+    body { 
+      background: #000; 
+      color: #0f0; 
+      font-family: monospace; 
+      text-align: center; 
+      padding: 20px; 
+    }
+    h1 { 
+      font-size: 2em; 
+      margin-bottom: 10px; 
+    }
+    .bus-time { 
+      font-size: 3em; 
+      font-weight: bold; 
+      margin: 20px; 
+    }
+    .updated { 
+      color: #555; 
+      font-size: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>BUS 55 · CHERRY HILL RD</h1>
+  <div id="arrival" class="bus-time">--</div>
+  <div id="updated" class="updated"></div>
+
+  <script>
+    async function updateBus() {
+      try {
+        const response = await fetch('/.netlify/functions/fetch-wmata');
+        const data = await response.json();
+        
+        const nextBus = data.Predictions?.[0];
+        const arrivalText = nextBus ? 
+          (nextBus.Min === 0 ? "ARRIVING NOW" : `${nextBus.Min} MIN`) : 
+          "NO BUSES";
+        
+        document.getElementById("arrival").textContent = arrivalText;
+        document.getElementById("updated").textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+      } catch (error) {
+        document.getElementById("arrival").textContent = "SERVICE UNAVAILABLE";
+      }
+    }
+
+    updateBus();
+    setInterval(updateBus, 30000);
+  </script>
+</body>
+</html>
