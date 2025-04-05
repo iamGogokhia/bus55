@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="refresh" content="30">
+    <style>
+        body { background: black; color: lime; font-family: Arial; text-align: center; padding: 20px; }
+        h1 { font-size: 24px; }
+        .bus-time { font-size: 48px; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h1>BUS 55 · CHERRY HILL RD</h1>
+    <div id="arrival-time">Loading...</div>
+    <script>
+        fetch('https://api.wmata.com/NextBusService.svc/json/jPredictions?StopID=6000756&RouteID=55', {
+            headers: { 'api_key': '9a890f42dfdb4cb7b9fd9caf80ac2d94' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            const nextBus = data.Predictions?.[0];
+            document.getElementById('arrival-time').innerHTML = 
+                nextBus ? (nextBus.Min === 0 ? "ARRIVING NOW" : `${nextBus.Min} MIN`) : "NO BUSES";
+        })
+        .catch(() => document.getElementById('arrival-time').textContent = "SERVICE UNAVAILABLE");
+    </script>
+</body>
+</html>
