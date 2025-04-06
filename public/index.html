@@ -31,25 +31,33 @@
   <div id="updated" class="updated"></div>
 
   <script>
-    async function updateBus() {
-      try {
-        const response = await fetch('/.netlify/functions/fetch-wmata');
-        const data = await response.json();
-        
-        const nextBus = data.Predictions?.[0];
-        const arrivalText = nextBus ? 
-          (nextBus.Min === 0 ? "ARRIVING NOW" : `${nextBus.Min} MIN`) : 
-          "NO BUSES";
-        
-        document.getElementById("arrival").textContent = arrivalText;
-        document.getElementById("updated").textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-      } catch (error) {
-        document.getElementById("arrival").textContent = "SERVICE UNAVAILABLE";
-      }
-    }
+  async function updateBus() {
+    try {
+      const response = await fetch('/.netlify/functions/fetch-wmata');
+      const data = await response.json();
 
-    updateBus();
-    setInterval(updateBus, 30000);
-  </script>
+      const arrivals = data.arrivals || [];
+
+      const arrivalHTML = arrivals.length
+        ? arrivals.map(bus => `
+            <div class="bus-time">
+              <strong>Route ${bus.RouteID}</strong> → ${bus.DirectionText}<br>
+              ${bus.Min === 0 ? "ARRIVING NOW" : `${bus.Min} MIN`}
+            </div>
+          `).join("")
+        : "<div class='bus-time'>NO BUSES</div>";
+
+      document.getElementById('arrival').innerHTML = arrivalHTML;
+      document.getElementById('updated').textContent = "Updated: " + new Date().toLocaleTimeString();
+    } catch (err) {
+      console.error("Error fetching arrivals:", err);
+      document.getElementById('arrival').textContent = "ERROR";
+    }
+  }
+
+  updateBus();
+  setInterval(updateBus, 30000); // Refresh every 30 sec
+</script>
+
 </body>
 </html>
