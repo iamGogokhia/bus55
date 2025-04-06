@@ -36,32 +36,35 @@
       const response = await fetch('/.netlify/functions/fetch-wmata');
       const data = await response.json();
 
-      const arrivals = data.arrivals || [];
+      console.log("🟢 API Data:", data);
 
-      const arrivalHTML = arrivals.length
-        ? arrivals.map(bus => `
-            <div class="bus-time">
-              <strong>Route ${bus.RouteID}</strong> → ${bus.DirectionText}<br>
-              ${
-                bus.Type === "live"
-                  ? (bus.Min === 0 ? "ARRIVING NOW" : `${bus.Min} MIN`)
-                  : `Scheduled: ${bus.Time}`
-              }
-              <div style="font-size: 0.5em; color: #666;">(${bus.Type})</div>
-            </div>
-          `).join("")
-        : "<div class='bus-time'>NO BUSES</div>";
+      if (!data.arrivals || data.arrivals.length === 0) {
+        document.getElementById('arrival').innerHTML = "<div class='bus-time'>NO BUSES</div>";
+        return;
+      }
+
+      const arrivalHTML = data.arrivals.map(bus => `
+        <div class="bus-time">
+          <strong>Route ${bus.RouteID}</strong> → ${bus.DirectionText}<br>
+          ${
+            bus.Type === "live"
+              ? (bus.Min === 0 ? "ARRIVING NOW" : `${bus.Min} MIN`)
+              : `Scheduled: ${bus.Time}`
+          }
+          <div style="font-size: 0.5em; color: #666;">(${bus.Type})</div>
+        </div>
+      `).join("");
 
       document.getElementById('arrival').innerHTML = arrivalHTML;
       document.getElementById('updated').textContent = "Updated: " + new Date().toLocaleTimeString();
     } catch (err) {
-      console.error("Error fetching arrivals:", err);
+      console.error("❌ Fetch error:", err);
       document.getElementById('arrival').textContent = "ERROR";
     }
   }
 
   updateBus();
-  setInterval(updateBus, 30000); // Every 30s
+  setInterval(updateBus, 30000); // refresh every 30s
 </script>
 
 
