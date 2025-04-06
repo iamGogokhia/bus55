@@ -1,112 +1,62 @@
 const fetch = require('node-fetch');
 
-// Cache configuration
-let cache = {
-    timestamp: 0,
-    data: null,
-    routeId: null,
-    stopId: null
-};
+exports.handler = async function(event, context) {
+  const STOP_ID = "6000756";
+  const API_KEY = process.env.WMATA_KEY;
 
-exports.handler = async (event) => {
-    const { 
-        stopId = "6000756",  // Default stop ID (7th St & Massachusetts Ave NW)
-        routeId = "55"       // Updated default route ID (Route 70)
-    } = event.queryStringParameters;
+  const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+  const predictionsURL = `https://api.wmata.com/NextBusService.svc/json/jPredictions?StopID=${STOP_ID}`;
+  const scheduleURL = `https://api.wmata.com/NextBusService.svc/json/jStopSchedule?StopID=${STOP_ID}&Date=${today}&Time=now`;
 
-    const API_KEY = process.env.WMATA_KEY;
+  try {
+    // Fetch live predictions
+    const [predictionsRes, scheduleRes] = await Promise.all([
+      fetch(predictionsURL, { headers: { api_key: API_KEY } }),
+      fetch(scheduleURL, { headers: { api_key: API_KEY } })
+    ]);
 
-    // Validate API key
-    if (!API_KEY) {
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                error: "Configuration Error",
-                message: "WMATA API key missing in environment variables"
-            })
-        };
-    }
+    const predictionsData = await predictionsRes.json();
+    const scheduleData = await scheduleRes.json();
 
-    // Cache validation check
-    const now = Date.now();
-    if (cache.stopId === stopId && 
-        cache.routeId === routeId && 
-        now - cache.timestamp < 30000) {
-        return {
-            statusCode: 200,
-            body: JSON.stringify(cache.data)
-        };
-    }
+    // Parse live predictions
+    const liveArrivals = (predictionsData.Predictions || []).map(p => ({
+      RouteID: p.RouteID,
+      DirectionText: p.DirectionText,
+      Min: p.Min,
+      Type: "live"
+    }));
 
-    // API request setup
-    const apiUrl = new URL('https://api.wmata.com/NextBusService.svc/json/jPredictions');
-    apiUrl.searchParams.set('StopID', stopId);
+    // Parse scheduled buses
+    const scheduledArrivals = (scheduleData.ScheduleItems || []).map(s => ({
+      RouteID: s.RouteID,
+      DirectionText: s.DirectionText,
+      Time: s.Time,
+      Type: "scheduled"
+    }));
 
-    try {
-        // Fetch live data
-        const response = await fetch(apiUrl.toString(), {
-            headers: { 'api_key': API_KEY }
-        });
+    // Combine, avoiding duplicates
+    const combined = [...liveArrivals];
 
-        if (!response.ok) {
-            throw new Error(`API Error: ${response.status} ${await response.text()}`);
-        }
+    scheduledArrivals.forEach(sched => {
+      const alreadyLive = liveArrivals.some(live => live.RouteID === sched.RouteID && live.DirectionText === sched.DirectionText);
+      if (!alreadyLive) combined.push(sched);
+    });
 
-        const result = await response.json();
-        
-        // Process predictions
-        const predictions = (result.Predictions || [])
-            .filter(p => p.RouteID === routeId)
-            .map(p => ({
-                Minutes: p.Minutes,
-                Direction: p.DirectionText.replace(/^\w+\s+to\s+/i, ''), // Clean direction text
-                Vehicle: p.VehicleID
-            }));
-
-        // Update cache with fresh data
-        cache = {
-            timestamp: now,
-            data: {
-                stop: result.StopName || `Stop ${stopId}`,
-                predictions,
-                metadata: {
-                    stopId,
-                    routeId,
-                    timestamp: new Date().toISOString(),
-                    apiStatus: "live"
-                }
-            },
-            routeId,
-            stopId
-        };
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify(cache.data)
-        };
-
-    } catch (error) {
-        // Fallback to cache if available
-        if (cache.data) {
-            return {
-                statusCode: 200,
-                body: JSON.stringify({
-                    ...cache.data,
-                    metadata: {
-                        ...cache.data.metadata,
-                        apiStatus: "cached",
-                        error: error.message
-                    }
-                })
-            };
-        }
-
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                error: "Service Unavailable",
-                message: error.message
-            })
-        };
-    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        arrivals: combined.sort((a, b) => {
+          const aMin = a.Min ?? parseInt(a.Time.split(":")[0]) * 60 + parseInt(a.Time.split(":")[1]);
+          const bMin = b.Min ?? parseInt(b.Time.split(":")[0]) * 60 + parseInt(b.Time.split(":")[1]);
+          return aMin - bMin;
+        })
+      })
+    };
+  } catch (err) {
+    console.error("❌ Error:", err.message);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Failed to fetch WMATA data", detail: err.message })
+    };
+  }
 };
