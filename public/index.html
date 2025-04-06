@@ -1,67 +1,95 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta http-equiv="refresh" content="30">
+  <title>Bus 55 Arrival Times</title>
   <style>
     body { 
       background: #000; 
       color: #0f0; 
-      font-family: monospace; 
+      font-family: 'Courier New', monospace; 
       text-align: center; 
-      padding: 20px; 
+      padding: 20px;
+      margin: 0;
     }
-    h1 { 
-      font-size: 2em; 
-      margin-bottom: 10px; 
+    h1 {
+      font-size: 1.5em;
+      margin: 20px 0;
+      text-transform: uppercase;
+      letter-spacing: 2px;
     }
-    .bus-time { 
-      font-size: 3em; 
-      font-weight: bold; 
-      margin: 20px; 
+    #arrival {
+      min-height: 120px;
+      margin: 30px 0;
     }
-    .updated { 
-      color: #555; 
-      font-size: 1em;
+    .prediction {
+      font-size: 2.5em;
+      margin: 15px 0;
+      font-weight: bold;
+      text-shadow: 0 0 10px #0f0;
+    }
+    .updated {
+      color: #393;
+      font-size: 0.9em;
+      position: fixed;
+      bottom: 20px;
+      width: 100%;
+    }
+    .status-message {
+      font-size: 1.5em;
+      color: #f00;
+      margin-top: 40px;
     }
   </style>
 </head>
 <body>
-  <h1>BUS 55 · CHERRY HILL RD</h1>
-  <div id="arrival" class="bus-time">--</div>
+  <h1>Bus 55 · Cherry Hill Rd</h1>
+  <div id="arrival"></div>
   <div id="updated" class="updated"></div>
 
 <script>
 async function updateBus() {
+  const arrivalDiv = document.getElementById('arrival');
+  const updatedDiv = document.getElementById('updated');
+  
   try {
-    const response = await fetch('/.netlify/functions/fetch-wmata');
+    // Show loading state
+    arrivalDiv.innerHTML = '<div class="status-message">LOADING...</div>';
+    
+    const response = await fetch('/.netlify/functions/fetch-wmata?stopId=1001195&routeId=55');
     const data = await response.json();
-    
-    const arrivalDiv = document.getElementById('arrival');
-    const updatedDiv = document.getElementById('updated');
-    
+
+    // Clear previous content
+    arrivalDiv.innerHTML = '';
+
     if (data.error) {
-      arrivalDiv.textContent = "SERVICE UNAVAILABLE";
+      arrivalDiv.innerHTML = `<div class="status-message">API ERROR: ${data.error}</div>`;
       return;
     }
 
     if (data.predictions.length === 0) {
-      arrivalDiv.textContent = "NO BUSES";
+      arrivalDiv.innerHTML = '<div class="status-message">NO BUSES IN NEXT 30 MIN</div>';
     } else {
-      const nextBus = data.predictions[0];
-      arrivalDiv.textContent = nextBus.Minutes === 0 
-        ? "ARRIVING NOW" 
-        : `${nextBus.Minutes} MIN`;
+      data.predictions.slice(0, 3).forEach(pred => {
+        const predictionEl = document.createElement('div');
+        predictionEl.className = 'prediction';
+        predictionEl.textContent = pred.Minutes === 0 
+          ? 'ARRIVING NOW' 
+          : `${pred.Minutes} MIN`;
+        arrivalDiv.appendChild(predictionEl);
+      });
     }
-    
-    updatedDiv.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-    
+
+    updatedDiv.textContent = `Updated: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
   } catch (error) {
-    document.getElementById('arrival').textContent = "NETWORK ERROR";
+    arrivalDiv.innerHTML = '<div class="status-message">NETWORK ERROR</div>';
+    console.error('Fetch error:', error);
   }
 }
 
-// Initial load + refresh every 30 sec
+// Initial load
 updateBus();
+// Refresh every 30 seconds
 setInterval(updateBus, 30000);
 </script>
 
