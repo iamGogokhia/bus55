@@ -1,7 +1,7 @@
 const fetch = require('node-fetch');
 
 exports.handler = async function(event, context) {
-  const STOP_ID = "6000756";
+  const STOP_ID = "1001195"; // Georgia Ave & H St NW (always active)
   const API_KEY = process.env.WMATA_KEY;
 
   const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
