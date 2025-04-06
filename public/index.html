@@ -30,7 +30,7 @@
   <div id="arrival" class="bus-time">--</div>
   <div id="updated" class="updated"></div>
 
-  <script>
+<script>
   async function updateBus() {
     try {
       const response = await fetch('/.netlify/functions/fetch-wmata');
@@ -42,7 +42,12 @@
         ? arrivals.map(bus => `
             <div class="bus-time">
               <strong>Route ${bus.RouteID}</strong> → ${bus.DirectionText}<br>
-              ${bus.Min === 0 ? "ARRIVING NOW" : `${bus.Min} MIN`}
+              ${
+                bus.Type === "live"
+                  ? (bus.Min === 0 ? "ARRIVING NOW" : `${bus.Min} MIN`)
+                  : `Scheduled: ${bus.Time}`
+              }
+              <div style="font-size: 0.5em; color: #666;">(${bus.Type})</div>
             </div>
           `).join("")
         : "<div class='bus-time'>NO BUSES</div>";
@@ -56,8 +61,9 @@
   }
 
   updateBus();
-  setInterval(updateBus, 30000); // Refresh every 30 sec
+  setInterval(updateBus, 30000); // Every 30s
 </script>
+
 
 </body>
 </html>
