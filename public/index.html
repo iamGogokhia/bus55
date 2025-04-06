@@ -31,42 +31,39 @@
   <div id="updated" class="updated"></div>
 
 <script>
-  async function updateBus() {
-    try {
-      const response = await fetch('/.netlify/functions/fetch-wmata');
-      const data = await response.json();
-
-      console.log("🟢 API Data:", data);
-
-      if (!data.arrivals || data.arrivals.length === 0) {
-        document.getElementById('arrival').innerHTML = "<div class='bus-time'>NO BUSES</div>";
-        return;
-      }
-
-      const arrivalHTML = data.arrivals.map(bus => `
-        <div class="bus-time">
-          <strong>Route ${bus.RouteID}</strong> → ${bus.DirectionText}<br>
-          ${
-            bus.Type === "live"
-              ? (bus.Min === 0 ? "ARRIVING NOW" : `${bus.Min} MIN`)
-              : `Scheduled: ${bus.Time}`
-          }
-          <div style="font-size: 0.5em; color: #666;">(${bus.Type})</div>
-        </div>
-      `).join("");
-
-      document.getElementById('arrival').innerHTML = arrivalHTML;
-      document.getElementById('updated').textContent = "Updated: " + new Date().toLocaleTimeString();
-    } catch (err) {
-      console.error("❌ Fetch error:", err);
-      document.getElementById('arrival').textContent = "ERROR";
+async function updateBus() {
+  try {
+    const response = await fetch('/.netlify/functions/fetch-wmata');
+    const data = await response.json();
+    
+    const arrivalDiv = document.getElementById('arrival');
+    const updatedDiv = document.getElementById('updated');
+    
+    if (data.error) {
+      arrivalDiv.textContent = "SERVICE UNAVAILABLE";
+      return;
     }
+
+    if (data.predictions.length === 0) {
+      arrivalDiv.textContent = "NO BUSES";
+    } else {
+      const nextBus = data.predictions[0];
+      arrivalDiv.textContent = nextBus.Minutes === 0 
+        ? "ARRIVING NOW" 
+        : `${nextBus.Minutes} MIN`;
+    }
+    
+    updatedDiv.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+    
+  } catch (error) {
+    document.getElementById('arrival').textContent = "NETWORK ERROR";
   }
+}
 
-  updateBus();
-  setInterval(updateBus, 30000); // refresh every 30s
+// Initial load + refresh every 30 sec
+updateBus();
+setInterval(updateBus, 30000);
 </script>
-
 
 </body>
 </html>
