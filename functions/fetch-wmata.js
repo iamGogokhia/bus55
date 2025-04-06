@@ -1,6 +1,6 @@
 const fetch = require('node-fetch');
 
-// Simple in-memory cache with 30-second expiration
+// Cache configuration
 let cache = {
     timestamp: 0,
     data: null,
@@ -10,24 +10,24 @@ let cache = {
 
 exports.handler = async (event) => {
     const { 
-        stopId = "1001195",  // Default stop ID
-        routeId = "55"       // Default route ID
+        stopId = "1001195",  // Default stop ID (7th St & Massachusetts Ave NW)
+        routeId = "70"       // Updated default route ID (Route 70)
     } = event.queryStringParameters;
 
     const API_KEY = process.env.WMATA_KEY;
 
-    // Validate environment configuration
+    // Validate API key
     if (!API_KEY) {
         return {
             statusCode: 500,
             body: JSON.stringify({
-                error: "Server Configuration Error",
-                message: "WMATA API key not configured"
+                error: "Configuration Error",
+                message: "WMATA API key missing in environment variables"
             })
         };
     }
 
-    // Check cache validity (same parameters and within 30 seconds)
+    // Cache validation check
     const now = Date.now();
     if (cache.stopId === stopId && 
         cache.routeId === routeId && 
@@ -38,41 +38,42 @@ exports.handler = async (event) => {
         };
     }
 
-    // Build API URL
+    // API request setup
     const apiUrl = new URL('https://api.wmata.com/NextBusService.svc/json/jPredictions');
     apiUrl.searchParams.set('StopID', stopId);
 
     try {
-        // Fetch real-time data from WMATA API
+        // Fetch live data
         const response = await fetch(apiUrl.toString(), {
             headers: { 'api_key': API_KEY }
         });
 
-        // Handle HTTP errors
         if (!response.ok) {
-            throw new Error(`WMATA API Error: ${response.status} ${response.statusText}`);
+            throw new Error(`API Error: ${response.status} ${await response.text()}`);
         }
 
-        // Parse and filter results
         const result = await response.json();
+        
+        // Process predictions
         const predictions = (result.Predictions || [])
             .filter(p => p.RouteID === routeId)
             .map(p => ({
                 Minutes: p.Minutes,
-                DirectionText: p.DirectionText,
-                VehicleID: p.VehicleID
+                Direction: p.DirectionText.replace(/^\w+\s+to\s+/i, ''), // Clean direction text
+                Vehicle: p.VehicleID
             }));
 
-        // Update cache
+        // Update cache with fresh data
         cache = {
             timestamp: now,
             data: {
-                stop: result.StopName || 'Unknown Stop',
+                stop: result.StopName || `Stop ${stopId}`,
                 predictions,
                 metadata: {
                     stopId,
                     routeId,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    apiStatus: "live"
                 }
             },
             routeId,
@@ -85,25 +86,25 @@ exports.handler = async (event) => {
         };
 
     } catch (error) {
-        // Return cached data if available during errors
+        // Fallback to cache if available
         if (cache.data) {
             return {
                 statusCode: 200,
                 body: JSON.stringify({
                     ...cache.data,
-                    error: {
-                        message: "Showing cached data due to API failure",
-                        originalError: error.message
+                    metadata: {
+                        ...cache.data.metadata,
+                        apiStatus: "cached",
+                        error: error.message
                     }
                 })
             };
         }
 
-        // Fallback error response
         return {
             statusCode: 500,
             body: JSON.stringify({
-                error: "Service Temporarily Unavailable",
+                error: "Service Unavailable",
                 message: error.message
             })
         };
