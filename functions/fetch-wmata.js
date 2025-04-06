@@ -10,8 +10,8 @@ let cache = {
 
 exports.handler = async (event) => {
     const { 
-        stopId = "1001195",  // Default stop ID (7th St & Massachusetts Ave NW)
-        routeId = "70"       // Updated default route ID (Route 70)
+        stopId = "6000756",  // Default stop ID (7th St & Massachusetts Ave NW)
+        routeId = "55"       // Updated default route ID (Route 70)
     } = event.queryStringParameters;
 
     const API_KEY = process.env.WMATA_KEY;
