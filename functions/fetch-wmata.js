@@ -1,55 +1,52 @@
 const fetch = require('node-fetch');
 
-exports.handler = async (event, context) => {
+exports.handler = async function(event, context) {
   const STOP_ID = "6000756"; // Cherry Hill Rd
+  const TARGET_ROUTE = "55";
   const API_KEY = process.env.WMATA_KEY;
 
-  // Debug: Check that API key exists
-  console.log("API Key Present:", !!API_KEY);
-
   const url = `https://api.wmata.com/NextBusService.svc/json/jPredictions?StopID=${STOP_ID}`;
-  console.log("Request URL:", url.replace(API_KEY, "REDACTED"));
 
   try {
     const response = await fetch(url, {
       headers: { 'api_key': API_KEY }
     });
 
-    // Debug: Check HTTP status
-    console.log("HTTP Status:", response.status);
+    if (!response.ok) {
+      throw new Error(`WMATA API error: ${response.statusText}`);
+    }
 
-    const rawData = await response.text();
-    console.log("Raw Response:", rawData);
+    const data = await response.json();
 
-    const data = JSON.parse(rawData);
+    if (!data.Predictions || data.Predictions.length === 0) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          arrivals: [],
+          message: "No arrival predictions found for this stop."
+        })
+      };
+    }
 
-    // Debug: Log predictions array
-    console.log("Predictions:", data.Predictions);
+    // Filter for Route 55 only
+    const filteredArrivals = data.Predictions.filter(pred => pred.RouteID === TARGET_ROUTE);
 
     return {
       statusCode: 200,
       body: JSON.stringify({
-        arrivals: data.Predictions || [],
-        message: data.Predictions && data.Predictions.length > 0 
-          ? "Bus arrivals retrieved."
-          : "No buses arriving soon."
+        arrivals: filteredArrivals,
+        message: filteredArrivals.length
+          ? "Bus 55 predictions retrieved successfully."
+          : "No Bus 55 predictions available right now."
       })
     };
   } catch (error) {
-    console.error("Full Error:", {
-      message: error.message,
-      stack: error.stack,
-      url: url.replace(API_KEY, "REDACTED")
-    });
-
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: "Failed to fetch bus data",
-        debug: {
-          stopId: STOP_ID,
-          apiKeyPresent: !!API_KEY
-        }
+        error: "Failed to fetch or parse WMATA data.",
+        detail: error.message,
+        url: url.replace(API_KEY, "[REDACTED]")
       })
     };
   }
