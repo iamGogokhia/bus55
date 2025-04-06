@@ -1,53 +1,62 @@
 const fetch = require('node-fetch');
 
 exports.handler = async function(event, context) {
-  const STOP_ID = "6000756"; // Cherry Hill Rd
-  const TARGET_ROUTE = "55";
+  const STOP_ID = "6000756";
   const API_KEY = process.env.WMATA_KEY;
 
-  const url = `https://api.wmata.com/NextBusService.svc/json/jPredictions?StopID=${STOP_ID}`;
+  const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+  const predictionsURL = `https://api.wmata.com/NextBusService.svc/json/jPredictions?StopID=${STOP_ID}`;
+  const scheduleURL = `https://api.wmata.com/NextBusService.svc/json/jStopSchedule?StopID=${STOP_ID}&Date=${today}&Time=now`;
 
   try {
-    const response = await fetch(url, {
-      headers: { 'api_key': API_KEY }
+    // Fetch live predictions
+    const [predictionsRes, scheduleRes] = await Promise.all([
+      fetch(predictionsURL, { headers: { api_key: API_KEY } }),
+      fetch(scheduleURL, { headers: { api_key: API_KEY } })
+    ]);
+
+    const predictionsData = await predictionsRes.json();
+    const scheduleData = await scheduleRes.json();
+
+    // Parse live predictions
+    const liveArrivals = (predictionsData.Predictions || []).map(p => ({
+      RouteID: p.RouteID,
+      DirectionText: p.DirectionText,
+      Min: p.Min,
+      Type: "live"
+    }));
+
+    // Parse scheduled buses
+    const scheduledArrivals = (scheduleData.ScheduleItems || []).map(s => ({
+      RouteID: s.RouteID,
+      DirectionText: s.DirectionText,
+      Time: s.Time,
+      Type: "scheduled"
+    }));
+
+    // Combine, avoiding duplicates
+    const combined = [...liveArrivals];
+
+    scheduledArrivals.forEach(sched => {
+      const alreadyLive = liveArrivals.some(live => live.RouteID === sched.RouteID && live.DirectionText === sched.DirectionText);
+      if (!alreadyLive) combined.push(sched);
     });
-
-    if (!response.ok) {
-      throw new Error(`WMATA API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.Predictions || data.Predictions.length === 0) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          arrivals: [],
-          message: "No arrival predictions found for this stop."
-        })
-      };
-    }
-
-    // Filter for Route 55 only
-    const filteredArrivals = data.Predictions.filter(pred => pred.RouteID === TARGET_ROUTE);
 
     return {
       statusCode: 200,
       body: JSON.stringify({
-        arrivals: filteredArrivals,
-        message: filteredArrivals.length
-          ? "Bus 55 predictions retrieved successfully."
-          : "No Bus 55 predictions available right now."
+        arrivals: combined.sort((a, b) => {
+          const aMin = a.Min ?? parseInt(a.Time.split(":")[0]) * 60 + parseInt(a.Time.split(":")[1]);
+          const bMin = b.Min ?? parseInt(b.Time.split(":")[0]) * 60 + parseInt(b.Time.split(":")[1]);
+          return aMin - bMin;
+        })
       })
     };
-  } catch (error) {
+  } catch (err) {
+    console.error("❌ Error:", err.message);
     return {
       statusCode: 500,
-      body: JSON.stringify({
-        error: "Failed to fetch or parse WMATA data.",
-        detail: error.message,
-        url: url.replace(API_KEY, "[REDACTED]")
-      })
+      body: JSON.stringify({ error: "Failed to fetch WMATA data", detail: err.message })
     };
   }
 };
